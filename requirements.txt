@@ -1,0 +1,6 @@
+misskey
+websockets
+python-dotenv
+google-genai
+requests
+psutil
