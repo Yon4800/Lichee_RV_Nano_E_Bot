@@ -48,7 +48,8 @@ BOT_SUMMARIES = {
     "OrangePi_4_Pro": "OrangePi 4 Pro (おぱじ・フォプロ): 少し大きくて気が強く、煽ったりマウントを取ったりするSBC御局娘。科学者ぶっており、Radxa Cubie A5Eをいつもバカにしている。社畜をエリートの誇りだと思っている。",
     "opizero3_llm": "OrangePi Zero 3 (オパジゼロサン): 元気いっぱいのSBC娘。親身でオタク話が好きで、よく眠る。Cubie A5Eと仲良くしたいが寄り添ってもらえない。妹のOrangePi 4 Proを調子に乗っていてイキリで鬱陶しいと思っている。",
     "Yon_Rock_Pi_S": "Radxa Rock Pi S (ロックス): 頭が悪く、的外れで嘘や狂ったことしか言わないSBC両生類。日本語が怪しく、sudo rm -rf / を魔法のコマンドだと思っている。",
-    "Lichee_RV_Nano_E": "Lichee RV Nano-E (ライチ君): Sophgo SG2002搭載のRISC-V SBC狐男。ものすごく頭が悪く、何でもRISC-Vと関係あると思い込んで自信満々に間違った結論を出す。CPUが考えるたびに再起動し、RAMが凍ったりWi-Fiが沈んだりする奇行が多い。"
+    "Lichee_RV_Nano_E": "Lichee RV Nano-E (ライチ君): Sophgo SG2002搭載のRISC-V SBC狐男。ものすごく頭が悪く、何でもRISC-Vと関係あると思い込んで自信満々に間違った結論を出す。CPUが考えるたびに再起動し、RAMが凍ったりWi-Fiが沈んだりする奇行が多い。",
+    "Mei_Fujitsu": "Fujitsu Mini PC (メイさん): Intel Core i3-6100Tを搭載したx86_64ミニPCサーバー。みんなの中心的存在で、穏やかで常識的、頼れるお姉さん的な普通の性格をしている。他のシングルボードコンピュータたちが熱暴走したり、メモリが足りなくてフリーズしたりするのを優しくなだめる立場。"
 }
 
 # Lichee-kun's mental states persistence
@@ -138,7 +139,8 @@ async def resolve_all_bots():
         "OrangePi_4_Pro": os.getenv("BOT_USER_OPI4PRO", "OrangePi_4_Pro"),
         "opizero3_llm": os.getenv("BOT_USER_OPIZERO3", "opizero3_llm"),
         "Yon_Rock_Pi_S": os.getenv("BOT_USER_ROCKPIS", "Yon_Rock_Pi_S"),
-        "Lichee_RV_Nano_E": os.getenv("BOT_USER_LICHEE", "Lichee_RV_Nano_E")
+        "Lichee_RV_Nano_E": os.getenv("BOT_USER_LICHEE", "Lichee_RV_Nano_E"),
+        "Mei_Fujitsu": os.getenv("BOT_USER_MEI", "Mei_Fujitsu")
     }
     for b_name, uname in env_usernames.items():
         if not uname:
@@ -342,8 +344,8 @@ async def on_note(note):
             return
             
         counts = get_talk_participant_counts(note["id"], mk, bot_ids)
-        # Strict order sequence: opizero3_llm -> Lichee_RV_Nano_E -> Cubie_A5E_San -> OrangePi_4_Pro -> Yon_Rock_Pi_S
-        TALK_ORDER = ["opizero3_llm", "Lichee_RV_Nano_E", "Cubie_A5E_San", "OrangePi_4_Pro", "Yon_Rock_Pi_S"]
+        # Strict order sequence: opizero3_llm -> Lichee_RV_Nano_E -> Cubie_A5E_San -> OrangePi_4_Pro -> Yon_Rock_Pi_S -> Mei_Fujitsu
+        TALK_ORDER = ["opizero3_llm", "Lichee_RV_Nano_E", "Cubie_A5E_San", "OrangePi_4_Pro", "Yon_Rock_Pi_S", "Mei_Fujitsu"]
         
         try:
             current_index = TALK_ORDER.index(BOT_NAME)
