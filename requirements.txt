@@ -1,6 +1,6 @@
 misskey
 websockets
 python-dotenv
-openai
+google-genai
 requests
 psutil
