@@ -376,10 +376,8 @@ async def on_note(note):
         
         conversation_messages = []
         for msg in history:
-            role = "model" if msg["role"] == "assistant" else "user"
-            conversation_messages.append(
-                types.Content(role=role, parts=[types.Part(text=msg["content"])])
-            )
+            role = "assistant" if msg["role"] in ["assistant", "model"] else "user"
+            conversation_messages.append({"role": role, "content": msg["content"]})
             
         instruction = seikaku + f"\n現在時刻は {datetime.now().strftime('%Y年%m月%d日 %H:%M')} です。\n"
         if next_bot:
