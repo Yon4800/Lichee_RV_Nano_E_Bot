@@ -648,12 +648,7 @@ async def on_note(note):
                 current_time = datetime.now().strftime("%Y年%m月%d日 %H:%M")
                 system_message = build_system_message(note["user"], current_time, "メンション", "", user_state)
                 
-                history = []
-                for msg in conversation_messages[:-1]:
-                    role = "model" if msg["role"] == "assistant" else "user"
-                    history.append(types.Content(role=role, parts=[types.Part(text=msg["content"])]))
-                
-                last_user_parts = [types.Part(text=conversation_messages[-1]["content"] or "")]
+                last_user_message = conversation_messages[-1]["content"] if conversation_messages else ""
                 
                 # Image attachments support
                 image_parts = []
