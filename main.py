@@ -5,6 +5,25 @@ from misskey import Misskey, NoteVisibility
 from dotenv import load_dotenv
 import os
 from openrouter_helper import generate_llm_reply
+import schedule
+from datetime import datetime, timedelta
+import random
+import re
+import requests
+import threading
+
+try:
+    import psutil
+except ImportError:
+    psutil = None
+
+load_dotenv()
+Token = os.getenv("TOKEN")
+Server = os.getenv("SERVER")
+mk = Misskey(Server)
+mk.token = Token
+
+from shared_economy_helper import load_economy, save_economy, get_user_state
 
 try:
     MY_ID = mk.i()["id"]
