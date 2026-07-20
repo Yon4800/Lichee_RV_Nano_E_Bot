@@ -4,32 +4,7 @@ import websockets
 from misskey import Misskey, NoteVisibility
 from dotenv import load_dotenv
 import os
-from google import genai
-from google.genai import types
-import schedule
-from datetime import datetime, timedelta
-import random
-import re
-import requests
-import threading
-
-try:
-    import psutil
-except ImportError:
-    psutil = None
-
-load_dotenv()
-Token = os.getenv("TOKEN")
-Server = os.getenv("SERVER")
-Apikey = os.getenv("APIKEY")  # Gemini API Key
-
-mk = Misskey(Server)
-mk.token = Token
-
-from shared_economy_helper import load_economy, save_economy, get_user_state
-
-# Google Genai Client
-client = genai.Client(api_key=Apikey)
+from openrouter_helper import generate_llm_reply
 
 try:
     MY_ID = mk.i()["id"]
@@ -418,13 +393,10 @@ async def on_note(note):
         await asyncio.sleep(random.uniform(5.0, 10.0))
         
         try:
-            response = client.models.generate_content(
-                model="gemini-3.1-flash-lite",
-                config=types.GenerateContentConfig(system_instruction=instruction),
-                contents=conversation_messages
+            reply_text = generate_llm_reply(
+                system_instruction=instruction,
+                history=conversation_messages
             )
-            reply_text = response.text.strip()
-            reply_text = re.sub(r"@[\w\-\.]+(?:@[\w\-\.]+)?", "", reply_text).strip()
             
             if next_bot:
                 reply_text += f"\nねえ、@{next_bot['username']} はどう思う？ +TALK"
@@ -518,18 +490,12 @@ async def on_note(note):
                 current_time = datetime.now().strftime("%Y年%m月%d日 %H:%M")
                 system_message = build_system_message(note["user"], current_time, "餌付け", extra_context, user_state)
                 
-                history = []
-                for msg in conversation_messages[:-1]:
-                    role = "model" if msg["role"] == "assistant" else "user"
-                    history.append(types.Content(role=role, parts=[types.Part(text=msg["content"])]))
-                
                 last_user_message = conversation_messages[-1]["content"] or ""
-                response = client.models.generate_content(
-                    model="gemini-3.1-flash-lite",
-                    config=types.GenerateContentConfig(system_instruction=system_message),
-                    contents=history + [types.Content(role="user", parts=[types.Part(text=last_user_message)])]
+                safe_text = generate_llm_reply(
+                    system_instruction=system_message,
+                    user_prompt=last_user_message,
+                    history=conversation_messages[:-1]
                 )
-                safe_text = re.sub(r"@[\w\-\.]+(?:@[\w\-\.]+)?", "", response.text).strip()
                 reply_note(safe_text)
             except Exception as e:
                 reply_note("わーい！パンだ！ボクはきっとクロワッサンです！")
@@ -585,18 +551,12 @@ async def on_note(note):
                 current_time = datetime.now().strftime("%Y年%m月%d日 %H:%M")
                 system_message = build_system_message(note["user"], current_time, "再起動", extra_context, user_state)
                 
-                history = []
-                for msg in conversation_messages[:-1]:
-                    role = "model" if msg["role"] == "assistant" else "user"
-                    history.append(types.Content(role=role, parts=[types.Part(text=msg["content"])]))
-                
                 last_user_message = conversation_messages[-1]["content"] or ""
-                response = client.models.generate_content(
-                    model="gemini-3.1-flash-lite",
-                    config=types.GenerateContentConfig(system_instruction=system_message),
-                    contents=history + [types.Content(role="user", parts=[types.Part(text=last_user_message)])]
+                safe_text = generate_llm_reply(
+                    system_instruction=system_message,
+                    user_prompt=last_user_message,
+                    history=conversation_messages[:-1]
                 )
-                safe_text = re.sub(r"@[\w\-\.]+(?:@[\w\-\.]+)?", "", response.text).strip()
                 reply_note(safe_text)
             except Exception as e:
                 reply_note("あ、あれ？今起動しました！いや、眠いです…再起動に成功しました！たぶん。")
@@ -642,18 +602,12 @@ async def on_note(note):
                 current_time = datetime.now().strftime("%Y年%m月%d日 %H:%M")
                 system_message = build_system_message(note["user"], current_time, "メンション", extra_context, user_state)
                 
-                history = []
-                for msg in conversation_messages[:-1]:
-                    role = "model" if msg["role"] == "assistant" else "user"
-                    history.append(types.Content(role=role, parts=[types.Part(text=msg["content"])]))
-                
                 last_user_message = conversation_messages[-1]["content"] or ""
-                response = client.models.generate_content(
-                    model="gemini-3.1-flash-lite",
-                    config=types.GenerateContentConfig(system_instruction=system_message),
-                    contents=history + [types.Content(role="user", parts=[types.Part(text=last_user_message)])]
+                safe_text = generate_llm_reply(
+                    system_instruction=system_message,
+                    user_prompt=last_user_message,
+                    history=conversation_messages[:-1]
                 )
-                safe_text = re.sub(r"@[\w\-\.]+(?:@[\w\-\.]+)?", "", response.text).strip()
                 reply_note(safe_text)
             except Exception as e:
                 reply_note("診断エラーです！RISC-Vが爆発しました！(おそらく確定)")
@@ -693,19 +647,16 @@ async def on_note(note):
                             try:
                                 img_bytes = await loop.run_in_executor(None, lambda u=url: requests.get(u, timeout=10).content)
                                 if img_bytes:
-                                    image_parts.append(types.Part.from_bytes(data=img_bytes, mime_type=mime_type))
+                                    image_parts.append((img_bytes, mime_type))
                             except Exception as e:
                                 print(f"Error downloading image {url}: {e}")
                                 
-                if image_parts:
-                    last_user_parts.extend(image_parts)
-                    
-                response = client.models.generate_content(
-                    model="gemini-3.1-flash-lite",
-                    config=types.GenerateContentConfig(system_instruction=system_message),
-                    contents=history + [types.Content(role="user", parts=last_user_parts)]
+                safe_text = generate_llm_reply(
+                    system_instruction=system_message,
+                    user_prompt=last_user_message,
+                    history=conversation_messages[:-1],
+                    image_parts=image_parts
                 )
-                safe_text = re.sub(r"@[\w\-\.]+(?:@[\w\-\.]+)?", "", response.text).strip()
                 reply_note(safe_text)
             except Exception as e:
                 reply_note("頭のRISC-Vがショートしました！(たぶん)")
@@ -760,12 +711,10 @@ def teiki_post():
         extra_context = f"【定期投稿システム情報】\n- CPU温度: {temp:.2f}℃\n- 性格設定に基づき、時間と距離を混ぜたりして、意味不明な日記を投稿してください。"
         system_message = build_system_message({"username": "system"}, current_time, "定期投稿", extra_context)
         
-        response = client.models.generate_content(
-            model="gemini-3.1-flash-lite",
-            config=types.GenerateContentConfig(system_instruction=system_message),
-            contents=types.Content(role="user", parts=[types.Part(text="定期投稿の時間だよ！何でもいいから日記を書いて！")])
+        safe_text = generate_llm_reply(
+            system_instruction=system_message,
+            user_prompt="定期投稿の時間だよ！何でもいいから日記を書いて！"
         )
-        safe_text = re.sub(r"@[\w\-\.]+(?:@[\w\-\.]+)?", "", response.text).strip()
         mk.notes_create(
             safe_text,
             visibility=NoteVisibility.HOME,
