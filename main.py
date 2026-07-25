@@ -419,7 +419,7 @@ async def on_note(note):
         
         try:
             response = client.models.generate_content(
-                model="gemini-3.1-flash-lite",
+                model="gemini-3.5-flash-lite",
                 config=types.GenerateContentConfig(system_instruction=instruction),
                 contents=conversation_messages
             )
@@ -525,7 +525,7 @@ async def on_note(note):
                 
                 last_user_message = conversation_messages[-1]["content"] or ""
                 response = client.models.generate_content(
-                    model="gemini-3.1-flash-lite",
+                    model="gemini-3.5-flash-lite",
                     config=types.GenerateContentConfig(system_instruction=system_message),
                     contents=history + [types.Content(role="user", parts=[types.Part(text=last_user_message)])]
                 )
@@ -592,7 +592,7 @@ async def on_note(note):
                 
                 last_user_message = conversation_messages[-1]["content"] or ""
                 response = client.models.generate_content(
-                    model="gemini-3.1-flash-lite",
+                    model="gemini-3.5-flash-lite",
                     config=types.GenerateContentConfig(system_instruction=system_message),
                     contents=history + [types.Content(role="user", parts=[types.Part(text=last_user_message)])]
                 )
@@ -649,7 +649,7 @@ async def on_note(note):
                 
                 last_user_message = conversation_messages[-1]["content"] or ""
                 response = client.models.generate_content(
-                    model="gemini-3.1-flash-lite",
+                    model="gemini-3.5-flash-lite",
                     config=types.GenerateContentConfig(system_instruction=system_message),
                     contents=history + [types.Content(role="user", parts=[types.Part(text=last_user_message)])]
                 )
@@ -701,7 +701,7 @@ async def on_note(note):
                     last_user_parts.extend(image_parts)
                     
                 response = client.models.generate_content(
-                    model="gemini-3.1-flash-lite",
+                    model="gemini-3.5-flash-lite",
                     config=types.GenerateContentConfig(system_instruction=system_message),
                     contents=history + [types.Content(role="user", parts=last_user_parts)]
                 )
@@ -761,7 +761,7 @@ def teiki_post():
         system_message = build_system_message({"username": "system"}, current_time, "定期投稿", extra_context)
         
         response = client.models.generate_content(
-            model="gemini-3.1-flash-lite",
+            model="gemini-3.5-flash-lite",
             config=types.GenerateContentConfig(system_instruction=system_message),
             contents=types.Content(role="user", parts=[types.Part(text="定期投稿の時間だよ！何でもいいから日記を書いて！")])
         )
