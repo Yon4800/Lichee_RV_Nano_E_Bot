@@ -1,4 +1,4 @@
-misskey
+Misskey.py
 websockets
 python-dotenv
 requests
