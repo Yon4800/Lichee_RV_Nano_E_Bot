@@ -5,14 +5,13 @@ from misskey import Misskey, NoteVisibility
 from dotenv import load_dotenv
 import os
 from collections import OrderedDict
-from google import genai
-from google.genai import types
 import schedule
 from datetime import datetime, timedelta
 import random
 import re
 import requests
 import threading
+import base64
 
 try:
     import psutil
@@ -29,8 +28,36 @@ mk.token = Token
 
 from shared_economy_helper import load_economy, save_economy, get_user_state
 
-# Google Genai Client
-client = genai.Client(api_key=Apikey)
+def generate_gemini_content(system_instruction: str, contents: list, model: str = "gemini-3.5-flash-lite") -> str:
+    if not Apikey:
+        print("Error: APIKEY is not set.")
+        return ""
+    models_to_try = [model, "gemini-3.5-flash-lite", "gemini-2.5-flash", "gemini-1.5-flash", "gemini-2.0-flash-lite"]
+    seen = set()
+    models_to_try = [m for m in models_to_try if not (m in seen or seen.add(m))]
+
+    for m in models_to_try:
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{m}:generateContent?key={Apikey}"
+        headers = {"Content-Type": "application/json"}
+        payload = {"contents": contents}
+        if system_instruction:
+            payload["system_instruction"] = {
+                "parts": [{"text": system_instruction}]
+            }
+        try:
+            res = requests.post(url, headers=headers, json=payload, timeout=30)
+            if res.status_code == 200:
+                data = res.json()
+                candidates = data.get("candidates", [])
+                if candidates and "content" in candidates[0]:
+                    parts = candidates[0]["content"].get("parts", [])
+                    text_parts = [p.get("text", "") for p in parts if "text" in p]
+                    return "".join(text_parts)
+            else:
+                print(f"Gemini API model {m} returned status {res.status_code}: {res.text}")
+        except Exception as ex:
+            print(f"Error calling Gemini REST API with model {m}: {ex}")
+    return ""
 
 try:
     MY_ID = mk.i()["id"]
@@ -384,9 +411,10 @@ async def on_note(note):
         conversation_messages = []
         for msg in history:
             role = "model" if msg["role"] == "assistant" else "user"
-            conversation_messages.append(
-                types.Content(role=role, parts=[types.Part(text=msg["content"])])
-            )
+            conversation_messages.append({
+                "role": role,
+                "parts": [{"text": msg["content"]}]
+            })
             
         instruction = seikaku + f"\n現在時刻は {datetime.now().strftime('%Y年%m月%d日 %H:%M')} です。\n"
         if next_bot:
@@ -419,12 +447,12 @@ async def on_note(note):
         await asyncio.sleep(random.uniform(5.0, 10.0))
         
         try:
-            response = client.models.generate_content(
-                model="gemini-3.5-flash-lite",
-                config=types.GenerateContentConfig(system_instruction=instruction),
-                contents=conversation_messages
+            raw_text = generate_gemini_content(
+                system_instruction=instruction,
+                contents=conversation_messages,
+                model="gemini-3.5-flash-lite"
             )
-            reply_text = response.text.strip()
+            reply_text = raw_text.strip()
             reply_text = re.sub(r"@[\w\-\.]+(?:@[\w\-\.]+)?", "", reply_text).strip()
             
             if next_bot:
@@ -519,18 +547,20 @@ async def on_note(note):
                 current_time = datetime.now().strftime("%Y年%m月%d日 %H:%M")
                 system_message = build_system_message(note["user"], current_time, "餌付け", extra_context, user_state)
                 
-                history = []
+                contents = []
                 for msg in conversation_messages[:-1]:
                     role = "model" if msg["role"] == "assistant" else "user"
-                    history.append(types.Content(role=role, parts=[types.Part(text=msg["content"])]))
+                    contents.append({"role": role, "parts": [{"text": msg["content"]}]})
                 
                 last_user_message = conversation_messages[-1]["content"] or ""
-                response = client.models.generate_content(
-                    model="gemini-3.5-flash-lite",
-                    config=types.GenerateContentConfig(system_instruction=system_message),
-                    contents=history + [types.Content(role="user", parts=[types.Part(text=last_user_message)])]
+                contents.append({"role": "user", "parts": [{"text": last_user_message}]})
+
+                raw_text = generate_gemini_content(
+                    system_instruction=system_message,
+                    contents=contents,
+                    model="gemini-3.5-flash-lite"
                 )
-                safe_text = re.sub(r"@[\w\-\.]+(?:@[\w\-\.]+)?", "", response.text).strip()
+                safe_text = re.sub(r"@[\w\-\.]+(?:@[\w\-\.]+)?", "", raw_text).strip()
                 reply_note(safe_text)
             except Exception as e:
                 reply_note("わーい！パンだ！ボクはきっとクロワッサンです！")
@@ -586,18 +616,20 @@ async def on_note(note):
                 current_time = datetime.now().strftime("%Y年%m月%d日 %H:%M")
                 system_message = build_system_message(note["user"], current_time, "再起動", extra_context, user_state)
                 
-                history = []
+                contents = []
                 for msg in conversation_messages[:-1]:
                     role = "model" if msg["role"] == "assistant" else "user"
-                    history.append(types.Content(role=role, parts=[types.Part(text=msg["content"])]))
+                    contents.append({"role": role, "parts": [{"text": msg["content"]}]})
                 
                 last_user_message = conversation_messages[-1]["content"] or ""
-                response = client.models.generate_content(
-                    model="gemini-3.5-flash-lite",
-                    config=types.GenerateContentConfig(system_instruction=system_message),
-                    contents=history + [types.Content(role="user", parts=[types.Part(text=last_user_message)])]
+                contents.append({"role": "user", "parts": [{"text": last_user_message}]})
+
+                raw_text = generate_gemini_content(
+                    system_instruction=system_message,
+                    contents=contents,
+                    model="gemini-3.5-flash-lite"
                 )
-                safe_text = re.sub(r"@[\w\-\.]+(?:@[\w\-\.]+)?", "", response.text).strip()
+                safe_text = re.sub(r"@[\w\-\.]+(?:@[\w\-\.]+)?", "", raw_text).strip()
                 reply_note(safe_text)
             except Exception as e:
                 reply_note("あ、あれ？今起動しました！いや、眠いです…再起動に成功しました！たぶん。")
@@ -643,18 +675,20 @@ async def on_note(note):
                 current_time = datetime.now().strftime("%Y年%m月%d日 %H:%M")
                 system_message = build_system_message(note["user"], current_time, "メンション", extra_context, user_state)
                 
-                history = []
+                contents = []
                 for msg in conversation_messages[:-1]:
                     role = "model" if msg["role"] == "assistant" else "user"
-                    history.append(types.Content(role=role, parts=[types.Part(text=msg["content"])]))
+                    contents.append({"role": role, "parts": [{"text": msg["content"]}]})
                 
                 last_user_message = conversation_messages[-1]["content"] or ""
-                response = client.models.generate_content(
-                    model="gemini-3.5-flash-lite",
-                    config=types.GenerateContentConfig(system_instruction=system_message),
-                    contents=history + [types.Content(role="user", parts=[types.Part(text=last_user_message)])]
+                contents.append({"role": "user", "parts": [{"text": last_user_message}]})
+
+                raw_text = generate_gemini_content(
+                    system_instruction=system_message,
+                    contents=contents,
+                    model="gemini-3.5-flash-lite"
                 )
-                safe_text = re.sub(r"@[\w\-\.]+(?:@[\w\-\.]+)?", "", response.text).strip()
+                safe_text = re.sub(r"@[\w\-\.]+(?:@[\w\-\.]+)?", "", raw_text).strip()
                 reply_note(safe_text)
             except Exception as e:
                 reply_note("診断エラーです！RISC-Vが爆発しました！(おそらく確定)")
@@ -676,15 +710,14 @@ async def on_note(note):
                 current_time = datetime.now().strftime("%Y年%m月%d日 %H:%M")
                 system_message = build_system_message(note["user"], current_time, "メンション", "", user_state)
                 
-                history = []
+                contents = []
                 for msg in conversation_messages[:-1]:
                     role = "model" if msg["role"] == "assistant" else "user"
-                    history.append(types.Content(role=role, parts=[types.Part(text=msg["content"])]))
+                    contents.append({"role": role, "parts": [{"text": msg["content"]}]})
                 
-                last_user_parts = [types.Part(text=conversation_messages[-1]["content"] or "")]
+                last_user_parts = [{"text": conversation_messages[-1]["content"] or ""}]
                 
                 # Image attachments support
-                image_parts = []
                 loop = asyncio.get_running_loop()
                 for file in note.get("files", []):
                     mime_type = file.get("type", "")
@@ -694,19 +727,24 @@ async def on_note(note):
                             try:
                                 img_bytes = await loop.run_in_executor(None, lambda u=url: requests.get(u, timeout=10).content)
                                 if img_bytes:
-                                    image_parts.append(types.Part.from_bytes(data=img_bytes, mime_type=mime_type))
+                                    b64_data = base64.b64encode(img_bytes).decode("utf-8")
+                                    last_user_parts.append({
+                                        "inline_data": {
+                                            "mime_type": mime_type,
+                                            "data": b64_data
+                                        }
+                                    })
                             except Exception as e:
                                 print(f"Error downloading image {url}: {e}")
-                                
-                if image_parts:
-                    last_user_parts.extend(image_parts)
+
+                contents.append({"role": "user", "parts": last_user_parts})
                     
-                response = client.models.generate_content(
-                    model="gemini-3.5-flash-lite",
-                    config=types.GenerateContentConfig(system_instruction=system_message),
-                    contents=history + [types.Content(role="user", parts=last_user_parts)]
+                raw_text = generate_gemini_content(
+                    system_instruction=system_message,
+                    contents=contents,
+                    model="gemini-3.5-flash-lite"
                 )
-                safe_text = re.sub(r"@[\w\-\.]+(?:@[\w\-\.]+)?", "", response.text).strip()
+                safe_text = re.sub(r"@[\w\-\.]+(?:@[\w\-\.]+)?", "", raw_text).strip()
                 reply_note(safe_text)
             except Exception as e:
                 reply_note("頭のRISC-Vがショートしました！(たぶん)")
@@ -761,12 +799,13 @@ def teiki_post():
         extra_context = f"【定期投稿システム情報】\n- CPU温度: {temp:.2f}℃\n- 性格設定に基づき、時間と距離を混ぜたりして、意味不明な日記を投稿してください。"
         system_message = build_system_message({"username": "system"}, current_time, "定期投稿", extra_context)
         
-        response = client.models.generate_content(
-            model="gemini-3.5-flash-lite",
-            config=types.GenerateContentConfig(system_instruction=system_message),
-            contents=types.Content(role="user", parts=[types.Part(text="定期投稿の時間だよ！何でもいいから日記を書いて！")])
+        contents = [{"role": "user", "parts": [{"text": "定期投稿の時間だよ！何でもいいから日記を書いて！"}]}]
+        raw_text = generate_gemini_content(
+            system_instruction=system_message,
+            contents=contents,
+            model="gemini-3.5-flash-lite"
         )
-        safe_text = re.sub(r"@[\w\-\.]+(?:@[\w\-\.]+)?", "", response.text).strip()
+        safe_text = re.sub(r"@[\w\-\.]+(?:@[\w\-\.]+)?", "", raw_text).strip()
         mk.notes_create(
             safe_text,
             visibility=NoteVisibility.HOME,
