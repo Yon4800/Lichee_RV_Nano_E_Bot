@@ -4,6 +4,7 @@ import websockets
 from misskey import Misskey, NoteVisibility
 from dotenv import load_dotenv
 import os
+from collections import OrderedDict
 from google import genai
 from google.genai import types
 import schedule
@@ -130,7 +131,7 @@ def register_bot(bot_name, mk_client):
         print(f"Error registering bot: {ex}")
 
 RESOLVED_BOTS = {}
-PROCESSED_NOTES = set()
+PROCESSED_NOTES = OrderedDict()
 
 async def resolve_all_bots():
     global RESOLVED_BOTS
@@ -309,9 +310,9 @@ async def on_note(note):
     if note_id:
         if note_id in PROCESSED_NOTES:
             return
-        PROCESSED_NOTES.add(note_id)
-        if len(PROCESSED_NOTES) > 200:
-            PROCESSED_NOTES.clear()
+        PROCESSED_NOTES[note_id] = True
+        if len(PROCESSED_NOTES) > 1000:
+            PROCESSED_NOTES.popitem(last=False)
 
     note_text = note.get("text") or ""
     is_talk_cmd = "+TALK" in note_text.upper()
@@ -503,7 +504,7 @@ async def on_note(note):
                 save_lichee_state(state)
                 
             try:
-                conversation_messages = get_conversation_history(note["id"])
+                conversation_messages = get_conversation_history(note.get("replyId"))
                 user_input = note_text.replace("+FEED", "").replace("パン", "").replace("おにぎり", "").strip()
                 user_input = re.sub(r"@[\w\-\.]+(?:@[\w\-\.]+)?", "", user_input).strip()
                 conversation_messages.append({"role": "user", "content": user_input})
@@ -569,7 +570,7 @@ async def on_note(note):
             threading.Thread(target=reset_sleep, daemon=True).start()
             
             try:
-                conversation_messages = get_conversation_history(note["id"])
+                conversation_messages = get_conversation_history(note.get("replyId"))
                 user_input = note_text.replace("+REBOOT", "").replace("再起動", "").strip()
                 user_input = re.sub(r"@[\w\-\.]+(?:@[\w\-\.]+)?", "", user_input).strip()
                 conversation_messages.append({"role": "user", "content": user_input})
@@ -610,7 +611,7 @@ async def on_note(note):
                 pass
                 
             try:
-                conversation_messages = get_conversation_history(note["id"])
+                conversation_messages = get_conversation_history(note.get("replyId"))
                 user_input = note_text.replace("+M", "").strip()
                 user_input = re.sub(r"@[\w\-\.]+(?:@[\w\-\.]+)?", "", user_input).strip()
                 conversation_messages.append({"role": "user", "content": user_input})
@@ -667,7 +668,7 @@ async def on_note(note):
                 pass
                 
             try:
-                conversation_messages = get_conversation_history(note["id"])
+                conversation_messages = get_conversation_history(note.get("replyId"))
                 user_input = note_text.replace("+LLM", "").strip()
                 user_input = re.sub(r"@[\w\-\.]+(?:@[\w\-\.]+)?", "", user_input).strip()
                 conversation_messages.append({"role": "user", "content": user_input})
